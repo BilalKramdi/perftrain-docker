@@ -7,7 +7,9 @@ CREATE TABLE users (
     is_verified BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    free_likes_used INTEGER DEFAULT 0,
+    free_likes_reset_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- User profiles table
@@ -47,7 +49,7 @@ CREATE TABLE profiles (
     deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    onboarding_step INTEGER DEFAULT 1,
+    onboarding_step INTEGER DEFAULT 0,
     onboarding_completed BOOLEAN DEFAULT FALSE
 );
 
@@ -77,6 +79,7 @@ CREATE TABLE matches (
     profile1_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     profile2_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     matched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'notified', 'conversation_started')),
     is_active BOOLEAN DEFAULT TRUE,
     UNIQUE(profile1_id, profile2_id)
 );
