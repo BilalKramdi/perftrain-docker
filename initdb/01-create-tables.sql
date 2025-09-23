@@ -13,6 +13,9 @@ CREATE TABLE users (
 );
 
 -- User profiles table
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE TABLE profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id VARCHAR(128) REFERENCES users(id) ON DELETE CASCADE,
@@ -25,6 +28,7 @@ CREATE TABLE profiles (
     display_orientation BOOLEAN DEFAULT FALSE,
     interested_in_genders TEXT[] DEFAULT NULL,
     interests TEXT[] DEFAULT NULL,
+    location geography(Point, 4326) DEFAULT NULL,
     location_city VARCHAR(100) DEFAULT NULL,
     location_country VARCHAR(100) DEFAULT NULL,
     latitude DECIMAL(10, 8) DEFAULT NULL,
@@ -53,6 +57,26 @@ CREATE TABLE profiles (
     onboarding_completed BOOLEAN DEFAULT FALSE
 );
 
+-- update profile location when location_city or location_country changes
+UPDATE profiles
+SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+
+
+
+CREATE OR REPLACE FUNCTION update_location()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.location = ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326)::geography;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_location
+BEFORE INSERT OR UPDATE ON profiles
+FOR EACH ROW
+EXECUTE FUNCTION update_location();
+
 -- Profile photos table
 CREATE TABLE profile_photos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -62,6 +86,22 @@ CREATE TABLE profile_photos (
     photo_order INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- create nerarby profiles view
+CREATE OR REPLACE FUNCTION public.profiles_within_distance(
+    center_geog geography(Point, 4326),
+    max_distance_km float
+)
+RETURNS SETOF profiles AS $$
+BEGIN
+    RETURN QUERY
+    SELECT *
+    FROM profiles
+    WHERE is_active = true
+      AND deleted_at IS NULL
+      AND ST_DWithin(location, center_geog, max_distance_km * 1000); -- PostGIS distances en mètres
+END;
+$$ LANGUAGE plpgsql STABLE;
 
 -- Swipes table (likes/passes)
 CREATE TABLE swipes (
@@ -84,17 +124,73 @@ CREATE TABLE matches (
     UNIQUE(profile1_id, profile2_id)
 );
 
--- Messages table
-CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
-    sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'gif', 'sticker')),
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+
+-- CREATE OR REPLACE VIEW "public"."pending_likes" AS
+-- SELECT
+--   s.id,
+--   s.swiper_id,
+--   s.swiped_id,
+--   s.is_like,
+--   s.created_at
+-- FROM
+--   swipes s
+-- WHERE
+--   (
+--     (s.is_like = true)
+--     AND (
+--       NOT (
+--         EXISTS (
+--           SELECT
+--             1
+--           FROM
+--             matches m
+--           WHERE
+--             (
+--               (
+--                 (m.profile1_id = s.swiper_id)
+--                 AND (m.profile2_id = s.swiped_id)
+--               )
+--               OR (
+--                 (m.profile2_id = s.swiper_id)
+--                 AND (m.profile1_id = s.swiped_id)
+--               )
+--             )
+--         )
+--       )
+--     )
+--   );
+
+-- -- Messages table
+-- CREATE TABLE messages (
+--     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+--     sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+--     content TEXT NOT NULL,
+--     message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'gif', 'sticker')),
+--     is_read BOOLEAN DEFAULT FALSE,
+--     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+--     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+
+-- CREATE OR REPLACE FUNCTION update_match_status_on_first_message()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--   -- Vérifie si le match n’est pas déjà en "conversation_started"
+--   IF (SELECT status FROM matches WHERE id = NEW.match_id) != 'conversation_started' THEN
+--     UPDATE matches
+--     SET status = 'conversation_started'
+--     WHERE id = NEW.match_id;
+--   END IF;
+
+--   RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- CREATE TRIGGER trigger_update_match_status
+-- AFTER INSERT ON messages
+-- FOR EACH ROW
+-- EXECUTE FUNCTION update_match_status_on_first_message();
+
 
 -- Reports table
 CREATE TABLE reports (
@@ -255,6 +351,7 @@ CREATE TABLE analytics_events (
 );
 
 -- Create indexes for new tables
+CREATE INDEX idx_profiles_location_geo ON profiles USING GIST(location);
 CREATE INDEX idx_user_activities_user_id ON user_activities(user_id);
 CREATE INDEX idx_user_activities_type ON user_activities(activity_type);
 CREATE INDEX idx_user_activities_created_at ON user_activities(created_at);
