@@ -1,0 +1,114 @@
+name: Hasura CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'hasura/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'hasura/**'
+
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: postgres_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Hasura CLI
+      run: |
+        curl -L https://github.com/hasura/graphql-engine/raw/stable/cli/get.sh | bash
+        sudo mv hasura /usr/local/bin/
+
+    - name: Make scripts executable
+      run: chmod +x scripts/*.sh
+
+    - name: Validate migrations
+      run: |
+        echo "🔍 Validation des migrations modifiées..."
+        
+        # Trouver les migrations modifiées
+        CHANGED_MIGRATIONS=$(git diff --name-only HEAD~1 HEAD -- hasura/migrations/ | grep "up.sql" || true)
+        
+        if [ -n "$CHANGED_MIGRATIONS" ]; then
+          echo "Migrations trouvées:"
+          echo "$CHANGED_MIGRATIONS"
+          
+          for migration in $CHANGED_MIGRATIONS; do
+            echo "🔍 Validation de $migration"
+            ./scripts/validate-migration.sh "$migration"
+            
+            if [ $? -eq 1 ]; then
+              echo "❌ Migration dangereuse: $migration"
+              exit 1
+            fi
+          done
+        else
+          echo "ℹ️  Aucune migration modifiée trouvée"
+        fi
+
+    - name: Test migrations against fresh database
+      run: |
+        echo "🧪 Test des migrations sur base fraîche..."
+        
+        # Appliquer toutes les migrations
+        cd hasura
+        hasura migrate apply --endpoint http://localhost:8080 --admin-secret test --skip-update-check
+        hasura metadata apply --endpoint http://localhost:8080 --admin-secret test --skip-update-check
+      env:
+        HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@localhost:5432/postgres_test
+
+    - name: Run Hasura for testing
+      run: |
+        docker run -d \
+          --name hasura-test \
+          --network host \
+          -e HASURA_GRAPHQL_DATABASE_URL=postgres://postgres:postgrespassword@localhost:5432/postgres_test \
+          -e HASURA_GRAPHQL_ADMIN_SECRET=test \
+          -e HASURA_GRAPHQL_ENABLE_CONSOLE=true \
+          hasura/graphql-engine:v2.36.0
+        
+        # Attendre que Hasura soit prêt
+        sleep 10
+
+    - name: Verify GraphQL schema
+      run: |
+        echo "🔍 Vérification du schéma GraphQL..."
+        
+        # Test de requête basique
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -H "X-Hasura-Admin-Secret: test" \
+          -d '{"query": "query { __schema { types { name } } }"}' \
+          http://localhost:8080/v1/graphql
+
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ Migrations Hasura validées avec succès!\n\n🔍 Toutes les migrations ont passé les tests de sécurité.\n🧪 Le schéma GraphQL est valide.'
+          })

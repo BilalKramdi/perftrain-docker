@@ -1,0 +1,10 @@
+table:
+  name: swipes
+  schema: public
+object_relationships:
+  - name: profile
+    using:
+      foreign_key_constraint_on: swiped_id
+  - name: profileBySwiperId
+    using:
+      foreign_key_constraint_on: swiper_id

@@ -1,0 +1,10 @@
+table:
+  name: messages
+  schema: public
+object_relationships:
+  - name: match
+    using:
+      foreign_key_constraint_on: match_id
+  - name: profile
+    using:
+      foreign_key_constraint_on: sender_id

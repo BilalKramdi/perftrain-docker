@@ -1,0 +1,10 @@
+table:
+  name: profile_interests
+  schema: public
+object_relationships:
+  - name: interest
+    using:
+      foreign_key_constraint_on: interest_id
+  - name: profile
+    using:
+      foreign_key_constraint_on: profile_id

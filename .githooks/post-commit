@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Git hook post-commit pour backup automatique après commit
+
+echo "💾 Création d'une sauvegarde post-commit..."
+
+# Vérifier si Docker Compose est en cours d'exécution
+if docker-compose ps postgres | grep -q "Up"; then
+    echo "📦 PostgreSQL détecté en cours d'exécution"
+    
+    # Créer une sauvegarde avec tag du commit
+    COMMIT_HASH=$(git rev-parse --short HEAD)
+    BACKUP_NAME="post_commit_${COMMIT_HASH}_$(date +%Y%m%d_%H%M%S).sql"
+    
+    echo "💾 Création de la sauvegarde: $BACKUP_NAME"
+    
+    # Exécuter le backup via Docker
+    docker-compose exec -T postgres sh -c "
+        POSTGRES_HOST=localhost \
+        POSTGRES_DB=postgres \
+        POSTGRES_USER=postgres \
+        POSTGRES_PASSWORD=postgrespassword \
+        pg_dump -h localhost -U postgres -d postgres --clean --no-owner --no-privileges --format=custom | gzip > /backups/$BACKUP_NAME.gz
+    "
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Sauvegarde post-commit créée: $BACKUP_NAME.gz"
+    else
+        echo "⚠️  Erreur lors de la sauvegarde post-commit"
+    fi
+else
+    echo "ℹ️  PostgreSQL non démarré, sauvegarde ignorée"
+fi

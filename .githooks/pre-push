@@ -1,0 +1,54 @@
+#!/bin/sh
+
+# Git hook pre-push pour automatiser les migrations Hasura
+
+echo "🔍 Vérification des changements Hasura avant push..."
+
+# Vérifier s'il y a des changements Hasura non commitées
+if [ -f "hasura/.hasura-changes" ]; then
+    echo "🔄 Changements Hasura détectés, génération des migrations..."
+    
+    # Lire les migrations depuis le fichier de changements
+    while IFS= read -r line; do
+        if [[ $line == *": auto_migration_"* ]]; then
+            MIGRATION_NAME=$(echo "$line" | cut -d':' -f2 | xargs)
+            echo "📋 Migration trouvée: $MIGRATION_NAME"
+            
+            # Valider la migration
+            MIGRATION_PATH="hasura/migrations/default/$MIGRATION_NAME"
+            if [ -f "$MIGRATION_PATH/up.sql" ]; then
+                echo "🔍 Validation de $MIGRATION_NAME..."
+                ./scripts/validate-migration.sh "$MIGRATION_PATH/up.sql"
+                
+                if [ $? -eq 1 ]; then
+                    echo "❌ Migration dangereuse détectée: $MIGRATION_NAME"
+                    echo "🚫 Push annulé pour des raisons de sécurité"
+                    exit 1
+                elif [ $? -eq 2 ]; then
+                    echo "⚠️  Migration avec warnings: $MIGRATION_NAME"
+                    echo "🤔 Voulez-vous continuer? (y/N)"
+                    read -r response
+                    if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+                        echo "❌ Push annulé par l'utilisateur"
+                        exit 1
+                    fi
+                fi
+            fi
+        fi
+    done < "hasura/.hasura-changes"
+    
+    # Ajouter les fichiers générés au commit si ils ne sont pas déjà trackés
+    echo "📦 Ajout des migrations au repository..."
+    git add hasura/migrations/
+    git add hasura/metadata/
+    
+    # Nettoyer le fichier de changements
+    rm -f "hasura/.hasura-changes"
+    
+    echo "✅ Migrations validées et ajoutées au repository"
+else
+    echo "ℹ️  Aucun changement Hasura détecté"
+fi
+
+echo "🚀 Push autorisé"
+exit 0

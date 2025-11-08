@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:15
+    restart: always
+    ports:
+      - 5432:5432
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
+      - ./backups:/backups
+    environment:
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      interval: 5s
+      retries: 5
+      start_period: 10s
+
+  hasura:
+    image: hasura/graphql-engine:v2.36.0
+    ports:
+      - 8080:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    volumes:
+      - ./hasura:/hasura-project
+    working_dir: /hasura-project
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
+      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey	
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+      HASURA_GRAPHQL_JWT_SECRET: >
+        {"type":"RS256","jwk_url": "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com", "audience": "aithletix-daa76", "issuer": "https://securetoken.google.com/aithletix-daa76"}
+
+  hasura-cli:
+    image: hasura/graphql-engine:v2.36.0
+    depends_on:
+      - hasura
+    volumes:
+      - ./hasura:/hasura-project
+      - ./scripts:/scripts
+    working_dir: /hasura-project
+    command: |
+      sh -c "
+        apk add --no-cache curl &&
+        curl -L https://github.com/hasura/graphql-engine/raw/stable/cli/get.sh | sh &&
+        /scripts/watch-hasura.sh
+      "
+    environment:
+      HASURA_GRAPHQL_ENDPOINT: http://hasura:8080
+      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
+
+  backup-cron:
+    image: postgres:15
+    depends_on:
+      - postgres
+    volumes:
+      - ./backups:/backups
+      - ./scripts:/scripts
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      BACKUP_RETENTION_DAYS: 7
+    command: |
+      sh -c "
+        apk add --no-cache dcron &&
+        echo '0 2 * * * /scripts/backup-db.sh' | crontab - &&
+        crond -f -d 8
+      "
+
+  postgres-test:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: postgres_test
+      POSTGRES_USER: postgres
+    volumes:
+      - ./scripts:/scripts
+    profiles:
+      - test
+
+volumes:
+  db_data:

@@ -1,0 +1,10 @@
+table:
+  name: reports
+  schema: public
+object_relationships:
+  - name: profile
+    using:
+      foreign_key_constraint_on: reported_id
+  - name: profileByReporterId
+    using:
+      foreign_key_constraint_on: reporter_id

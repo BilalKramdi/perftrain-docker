@@ -1,0 +1,10 @@
+table:
+  name: super_likes
+  schema: public
+object_relationships:
+  - name: profile
+    using:
+      foreign_key_constraint_on: receiver_id
+  - name: profileBySenderId
+    using:
+      foreign_key_constraint_on: sender_id

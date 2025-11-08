@@ -1,0 +1,18 @@
+table:
+  name: matches
+  schema: public
+object_relationships:
+  - name: profile
+    using:
+      foreign_key_constraint_on: profile1_id
+  - name: profileByProfile2Id
+    using:
+      foreign_key_constraint_on: profile2_id
+array_relationships:
+  - name: messages
+    using:
+      foreign_key_constraint_on:
+        column: match_id
+        table:
+          name: messages
+          schema: public

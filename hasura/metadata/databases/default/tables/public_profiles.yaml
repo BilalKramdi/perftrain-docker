@@ -1,0 +1,99 @@
+table:
+  name: profiles
+  schema: public
+object_relationships:
+  - name: user
+    using:
+      foreign_key_constraint_on: user_id
+array_relationships:
+  - name: blocks
+    using:
+      foreign_key_constraint_on:
+        column: blocked_id
+        table:
+          name: blocks
+          schema: public
+  - name: blocksByBlockerId
+    using:
+      foreign_key_constraint_on:
+        column: blocker_id
+        table:
+          name: blocks
+          schema: public
+  - name: matches
+    using:
+      foreign_key_constraint_on:
+        column: profile1_id
+        table:
+          name: matches
+          schema: public
+  - name: matchesByProfile2Id
+    using:
+      foreign_key_constraint_on:
+        column: profile2_id
+        table:
+          name: matches
+          schema: public
+  - name: messages
+    using:
+      foreign_key_constraint_on:
+        column: sender_id
+        table:
+          name: messages
+          schema: public
+  - name: profile_interests
+    using:
+      foreign_key_constraint_on:
+        column: profile_id
+        table:
+          name: profile_interests
+          schema: public
+  - name: profile_photos
+    using:
+      foreign_key_constraint_on:
+        column: profile_id
+        table:
+          name: profile_photos
+          schema: public
+  - name: reports
+    using:
+      foreign_key_constraint_on:
+        column: reported_id
+        table:
+          name: reports
+          schema: public
+  - name: reportsByReporterId
+    using:
+      foreign_key_constraint_on:
+        column: reporter_id
+        table:
+          name: reports
+          schema: public
+  - name: superLikesBySenderId
+    using:
+      foreign_key_constraint_on:
+        column: sender_id
+        table:
+          name: super_likes
+          schema: public
+  - name: super_likes
+    using:
+      foreign_key_constraint_on:
+        column: receiver_id
+        table:
+          name: super_likes
+          schema: public
+  - name: swipes
+    using:
+      foreign_key_constraint_on:
+        column: swiped_id
+        table:
+          name: swipes
+          schema: public
+  - name: swipesBySwiperId
+    using:
+      foreign_key_constraint_on:
+        column: swiper_id
+        table:
+          name: swipes
+          schema: public
