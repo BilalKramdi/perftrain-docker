@@ -20,10 +20,36 @@ services:
       retries: 5
       start_period: 10s
 
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=ton_email@example.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    restart: always
+
   hasura:
     image: hasura/graphql-engine:v2.36.0
     ports:
       - 8080:8080
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura.entrypoints=websecure"
+      - "traefik.http.routers.hasura.tls.certresolver=myresolver"
+      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,54 +66,54 @@ services:
       HASURA_GRAPHQL_JWT_SECRET: >
         {"type":"RS256","jwk_url": "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com", "audience": "aithletix-daa76", "issuer": "https://securetoken.google.com/aithletix-daa76"}
 
-  hasura-cli:
-    image: hasura/graphql-engine:v2.36.0
-    depends_on:
-      - hasura
-    volumes:
-      - ./hasura:/hasura-project
-      - ./scripts:/scripts
-    working_dir: /hasura-project
-    command: |
-      sh -c "
-        apk add --no-cache curl &&
-        curl -L https://github.com/hasura/graphql-engine/raw/stable/cli/get.sh | sh &&
-        /scripts/watch-hasura.sh
-      "
-    environment:
-      HASURA_GRAPHQL_ENDPOINT: http://hasura:8080
-      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
+  # hasura-cli:
+  #   image: hasura/graphql-engine:v2.36.0
+  #   depends_on:
+  #     - hasura
+  #   volumes:
+  #     - ./hasura:/hasura-project
+  #     - ./scripts:/scripts
+  #   working_dir: /hasura-project
+  #   command: |
+  #     sh -c "
+  #       apk add --no-cache curl &&
+  #       curl -L https://github.com/hasura/graphql-engine/raw/stable/cli/get.sh | sh &&
+  #       /scripts/watch-hasura.sh
+  #     "
+  #   environment:
+  #     HASURA_GRAPHQL_ENDPOINT: http://hasura:8080
+  #     HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
 
-  backup-cron:
-    image: postgres:15
-    depends_on:
-      - postgres
-    volumes:
-      - ./backups:/backups
-      - ./scripts:/scripts
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      BACKUP_RETENTION_DAYS: 7
-    command: |
-      sh -c "
-        apk add --no-cache dcron &&
-        echo '0 2 * * * /scripts/backup-db.sh' | crontab - &&
-        crond -f -d 8
-      "
+  # backup-cron:
+  #   image: postgres:15
+  #   depends_on:
+  #     - postgres
+  #   volumes:
+  #     - ./backups:/backups
+  #     - ./scripts:/scripts
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_DB: postgres
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgrespassword
+  #     BACKUP_RETENTION_DAYS: 7
+  #   command: |
+  #     sh -c "
+  #       apk add --no-cache dcron &&
+  #       echo '0 2 * * * /scripts/backup-db.sh' | crontab - &&
+  #       crond -f -d 8
+  #     "
 
-  postgres-test:
-    image: postgres:15
-    environment:
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: postgres_test
-      POSTGRES_USER: postgres
-    volumes:
-      - ./scripts:/scripts
-    profiles:
-      - test
+  # postgres-test:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_PASSWORD: postgrespassword
+  #     POSTGRES_DB: postgres_test
+  #     POSTGRES_USER: postgres
+  #   volumes:
+  #     - ./scripts:/scripts
+  #   profiles:
+  #     - test
 
 volumes:
   db_data:
