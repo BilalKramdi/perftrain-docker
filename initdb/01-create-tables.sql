@@ -220,7 +220,7 @@ CREATE TABLE workout_set (
 
 -- Nutrition Program
 CREATE TABLE nutrition_program (
-  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  
   user_id       VARCHAR(128) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   description   TEXT,
