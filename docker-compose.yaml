@@ -1,9 +1,11 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:15
     restart: always
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./initdb:/docker-entrypoint-initdb.d
@@ -13,9 +15,7 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
     healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U postgres
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       retries: 5
       start_period: 10s
@@ -23,6 +23,14 @@ services:
   traefik:
     image: traefik:v2.10
     container_name: traefik
+    restart: always
+    ports:
+      - "80:80"       # HTTP pour ACME et redirection
+      - "443:443"     # HTTPS
+      - "8080:8080"   # Dashboard Traefik (optionnel)
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
     command:
       - "--api.dashboard=true"
       - "--providers.docker=true"
@@ -32,97 +40,40 @@ services:
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.myresolver.acme.email=bilal.kramdi@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
-    restart: always
 
   hasura:
     image: hasura/graphql-engine:v2.36.0
-    ports:
-      - 8080:8080
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura.entrypoints=websecure"
-      - "traefik.http.routers.hasura.tls.certresolver=myresolver"
-      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
-
-      # Router HTTP pour ACME challenge
-      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura-http.entrypoints=web"
-      - "traefik.http.routers.hasura-http.middlewares=redirect-to-https"
-
-      # Middleware HTTPS
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
-    restart: always
     volumes:
       - ./hasura:/hasura-project
     working_dir: /hasura-project
     environment:
       HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
-      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey	
+      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_DEV_MODE: "true"
       HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
       HASURA_GRAPHQL_JWT_SECRET: >
         {"type":"RS256","jwk_url": "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com", "audience": "aithletix-daa76", "issuer": "https://securetoken.google.com/aithletix-daa76"}
+    labels:
+      - "traefik.enable=true"
 
-  # hasura-cli:
-  #   image: hasura/graphql-engine:v2.36.0
-  #   depends_on:
-  #     - hasura
-  #   volumes:
-  #     - ./hasura:/hasura-project
-  #     - ./scripts:/scripts
-  #   working_dir: /hasura-project
-  #   command: |
-  #     sh -c "
-  #       apk add --no-cache curl &&
-  #       curl -L https://github.com/hasura/graphql-engine/raw/stable/cli/get.sh | sh &&
-  #       /scripts/watch-hasura.sh
-  #     "
-  #   environment:
-  #     HASURA_GRAPHQL_ENDPOINT: http://hasura:8080
-  #     HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
+      # Router HTTPS principal avec ACME
+      - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura.entrypoints=websecure"
+      - "traefik.http.routers.hasura.tls.certresolver=myresolver"
+      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
 
-  # backup-cron:
-  #   image: postgres:15
-  #   depends_on:
-  #     - postgres
-  #   volumes:
-  #     - ./backups:/backups
-  #     - ./scripts:/scripts
-  #   environment:
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_DB: postgres
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgrespassword
-  #     BACKUP_RETENTION_DAYS: 7
-  #   command: |
-  #     sh -c "
-  #       apk add --no-cache dcron &&
-  #       echo '0 2 * * * /scripts/backup-db.sh' | crontab - &&
-  #       crond -f -d 8
-  #     "
+      # Router HTTP pour redirection vers HTTPS
+      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura-http.entrypoints=web"
+      - "traefik.http.routers.hasura-http.middlewares=redirect-to-https"
 
-  # postgres-test:
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_PASSWORD: postgrespassword
-  #     POSTGRES_DB: postgres_test
-  #     POSTGRES_USER: postgres
-  #   volumes:
-  #     - ./scripts:/scripts
-  #   profiles:
-  #     - test
+      # Middleware de redirection
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
 volumes:
   db_data:
