@@ -41,40 +41,40 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=bilal.kramdi@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
 
-hasura:
-  image: hasura/graphql-engine:v2.36.0
-  restart: always
-  depends_on:
-    postgres:
-      condition: service_healthy
-  volumes:
-    - ./hasura:/hasura-project
-  working_dir: /hasura-project
-  environment:
-    HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
-    HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
-    HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
-    HASURA_GRAPHQL_DEV_MODE: "true"
-    HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
-  labels:
-    # Activer Traefik pour ce service
-    - "traefik.enable=true"
+  hasura:
+    image: hasura/graphql-engine:v2.36.0
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./hasura:/hasura-project
+    working_dir: /hasura-project
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
+      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+    labels:
+      # Activer Traefik pour ce service
+      - "traefik.enable=true"
 
-    # Router HTTPS principal pour Hasura
-    - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
-    - "traefik.http.routers.hasura.entrypoints=websecure"
-    - "traefik.http.routers.hasura.tls.certresolver=myresolver"
-    - "traefik.http.services.hasura.loadbalancer.server.port=8080"
+      # Router HTTPS principal pour Hasura
+      - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura.entrypoints=websecure"
+      - "traefik.http.routers.hasura.tls.certresolver=myresolver"
+      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
 
-    # Router HTTP pour le challenge ACME
-    - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
-    - "traefik.http.routers.hasura-http.entrypoints=web"
-    - "traefik.http.routers.hasura-http.priority=100"
-    - "traefik.http.routers.hasura-http.middlewares=acme-challenge-only"
+      # Router HTTP pour le challenge ACME
+      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura-http.entrypoints=web"
+      - "traefik.http.routers.hasura-http.priority=100"
+      - "traefik.http.routers.hasura-http.middlewares=acme-challenge-only"
 
-    # Middleware qui laisse passer uniquement le challenge ACME
-    - "traefik.http.middlewares.acme-challenge-only.chain.middlewares=strip-https"
-    - "traefik.http.middlewares.strip-https.stripPrefix.prefixes=/.well-known/acme-challenge"
+      # Middleware qui laisse passer uniquement le challenge ACME
+      - "traefik.http.middlewares.acme-challenge-only.chain.middlewares=strip-https"
+      - "traefik.http.middlewares.strip-https.stripPrefix.prefixes=/.well-known/acme-challenge"
 
 
 volumes:
