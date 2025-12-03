@@ -1,78 +1,52 @@
-version: "3.9"
+version: "3.8"
 
 services:
-  postgres:
-    image: postgres:15
-    restart: always
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-      - ./initdb:/docker-entrypoint-initdb.d
-      - ./backups:/backups
-    environment:
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      retries: 5
-      start_period: 10s
-
   traefik:
-    image: traefik:v2.10
+    image: traefik:v2.14
     container_name: traefik
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+    restart: unless-stopped
     command:
-      - "--log.level=DEBUG"
-      - "--api.dashboard=true"
+      - "--api.insecure=true"                   # Dashboard Traefik (optionnel)
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.myresolver.acme.email=bilal.kramdi@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.email=ton-email@example.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
 
   hasura:
-    image: hasura/graphql-engine:v2.36.0
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./hasura:/hasura-project
-    working_dir: /hasura-project
+    image: hasura/graphql-engine:v2.31.0
+    container_name: hasura
+    restart: unless-stopped
+    ports:
+      - "8080:8080"  # interne Docker
     environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/postgres
-      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecretkey
-      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
-      HASURA_GRAPHQL_DEV_MODE: "true"
-      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+      HASURA_GRAPHQL_DATABASE_URL: postgres://user:pass@postgres:5432/dbname
+      HASURA_GRAPHQL_ADMIN_SECRET: tonSecret
     labels:
       - "traefik.enable=true"
-
-      # Router HTTPS principal pour Hasura
       - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura.entrypoints=web"
       - "traefik.http.routers.hasura.entrypoints=websecure"
+      - "traefik.http.routers.hasura.tls=true"
       - "traefik.http.routers.hasura.tls.certresolver=myresolver"
       - "traefik.http.services.hasura.loadbalancer.server.port=8080"
 
-      # Router HTTP pour redirection automatique vers HTTPS
-      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura-http.entrypoints=web"
-      - "traefik.http.routers.hasura-http.middlewares=redirect-to-https"
-
-      # Middleware de redirection HTTP → HTTPS
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: dbname
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
 volumes:
-  db_data:
+  postgres-data:
