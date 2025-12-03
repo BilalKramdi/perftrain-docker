@@ -57,25 +57,23 @@ services:
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_DEV_MODE: "true"
       HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
-    labels:
-      # Activer Traefik pour ce service
-      - "traefik.enable=true"
+      labels:
+        - "traefik.enable=true"
 
-      # Router HTTPS principal pour Hasura
-      - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura.entrypoints=websecure"
-      - "traefik.http.routers.hasura.tls.certresolver=myresolver"
-      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
+        # Router HTTPS principal pour Hasura
+        - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
+        - "traefik.http.routers.hasura.entrypoints=websecure"
+        - "traefik.http.routers.hasura.tls.certresolver=myresolver"
+        - "traefik.http.services.hasura.loadbalancer.server.port=8080"
 
-      # Router HTTP pour le challenge ACME
-      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura-http.entrypoints=web"
-      - "traefik.http.routers.hasura-http.priority=100"
-      - "traefik.http.routers.hasura-http.middlewares=acme-challenge-only"
+        # Router HTTP pour redirection automatique vers HTTPS
+        - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
+        - "traefik.http.routers.hasura-http.entrypoints=web"
+        - "traefik.http.routers.hasura-http.middlewares=redirect-to-https"
 
-      # Middleware qui laisse passer uniquement le challenge ACME
-      - "traefik.http.middlewares.acme-challenge-only.chain.middlewares=strip-https"
-      - "traefik.http.middlewares.strip-https.stripPrefix.prefixes=/.well-known/acme-challenge"
+        # Middleware de redirection HTTP → HTTPS
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
 
 
 volumes:
