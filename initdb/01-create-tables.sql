@@ -33,6 +33,7 @@ CREATE TABLE users (
   id           VARCHAR(128) PRIMARY KEY,
   email        VARCHAR(255) NOT NULL UNIQUE,
   is_verified  BOOLEAN DEFAULT false,
+  is_premium   BOOLEAN DEFAULT false,
   deleted_at   TIMESTAMPTZ,
   created_at   TIMESTAMPTZ DEFAULT now(),
   updated_at   TIMESTAMPTZ DEFAULT now()
