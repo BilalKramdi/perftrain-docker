@@ -6,16 +6,26 @@ services:
     container_name: traefik
     restart: unless-stopped
     command:
-      - "--api.insecure=true"                   # Dashboard Traefik (optionnel)
+      - "--api.insecure=true"
       - "--providers.docker=true"
+
+      # Entrypoints
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+
+      # Redirection HTTP -> HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Let's Encrypt (HTTP-01)
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.myresolver.acme.email=bilal.kramdi@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+
     ports:
       - "80:80"
       - "443:443"
+
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
@@ -24,29 +34,27 @@ services:
     image: hasura/graphql-engine:v2.31.0
     container_name: hasura
     restart: unless-stopped
-    ports:
-      - "8080:8080"  # interne Docker
+
     environment:
       HASURA_GRAPHQL_DATABASE_URL: postgres://user:pass@postgres:5432/dbname
       HASURA_GRAPHQL_ADMIN_SECRET: tonSecret
+
     labels:
       - "traefik.enable=true"
+
+      # Router HTTP (nécessaire pour Let's Encrypt)
+      - "traefik.http.routers.hasura-http.rule=Host(`hasura.perftrain.com`)"
+      - "traefik.http.routers.hasura-http.entrypoints=web"
+
+      # Router HTTPS
       - "traefik.http.routers.hasura.rule=Host(`hasura.perftrain.com`)"
-      - "traefik.http.routers.hasura.entrypoints=web"
       - "traefik.http.routers.hasura.entrypoints=websecure"
       - "traefik.http.routers.hasura.tls=true"
       - "traefik.http.routers.hasura.tls.certresolver=myresolver"
+
+      # Port interne Hasura
       - "traefik.http.services.hasura.loadbalancer.server.port=8080"
 
   postgres:
     image: postgres:15
-    container_name: postgres
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: dbname
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-
-volumes:
-  postgres-data:
+    container_name: postgr_
